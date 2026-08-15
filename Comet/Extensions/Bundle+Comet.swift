@@ -9,12 +9,10 @@ import Foundation
 
 internal extension Bundle {
     static var comet: Bundle {
-        #if ROOTLESS
-        let path = "/var/jb/Library/Frameworks/Comet.framework/Resources.bundle/"
-        #else
-        let path = "/Library/Frameworks/Comet.framework/Resources.bundle/"
-        #endif
-        
+        // The bridge resolves this jailbreak-relative path through jbroot() for
+        // RootHide and through the standard rootless prefix for other schemes.
+        let path = CometJailbreakPath("/Library/Frameworks/Comet.framework/Resources.bundle/")
+
         if let bundle = Bundle(path: path) {
             NSLog("[Comet]: Bundle (\(path)): loaded")
             return bundle

@@ -5,5 +5,5 @@ Description: A SwiftUI Prefs Framework
 Maintainer: Ginsu
 Author: Ginsu
 Section: Tweaks
-Depends: dev.theos.orion14, firmware (>= 14.0)
+Depends: dev.theos.orion14, firmware (>= 15.0)
 Version: 1.0.0
