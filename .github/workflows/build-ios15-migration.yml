@@ -1,6 +1,9 @@
 name: Build Comet iOS 15 Migration
 
 on:
+  push:
+    branches:
+      - migration/ios15-rootless-roothide
   workflow_dispatch:
     inputs:
       scheme:
