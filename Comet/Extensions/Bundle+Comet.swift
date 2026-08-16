@@ -7,12 +7,21 @@
 
 import Foundation
 
+#if ROOTHIDE
+@_silgen_name("jbroot")
+private func cometJBRoot(_ path: NSString) -> NSString
+#endif
+
 internal extension Bundle {
     static var comet: Bundle {
-        #if ROOTLESS
-        let path = "/var/jb/Library/Frameworks/Comet.framework/Resources.bundle/"
+        let relativePath = "/Library/Frameworks/Comet.framework/Resources.bundle/"
+        #if ROOTHIDE
+        // RootHide randomizes jbroot. Resolve the bootstrap path at runtime.
+        let path = cometJBRoot(relativePath as NSString) as String
+        #elseif ROOTLESS
+        let path = "/var/jb" + relativePath
         #else
-        let path = "/Library/Frameworks/Comet.framework/Resources.bundle/"
+        let path = relativePath
         #endif
         
         if let bundle = Bundle(path: path) {

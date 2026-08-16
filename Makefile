@@ -1,30 +1,47 @@
 ROOTLESS ?= 0
+ROOTHIDE ?= 0
 
 # Build config
 ARCHS = arm64 arm64e
 THEOS_DEVICE_IP = localhost -p 2222
 INSTALL_TARGET_PROCESSES = Preferences
+TARGET ?= iphone:clang:latest:15.0
 PACKAGE_VERSION = 1.1.0
 
-# Rootless / Rootful settings
+# Keep the staging layout root-relative. Theos applies the selected package
+# scheme prefix; RootHide must never embed a fixed /var/jb path in Mach-O.
+COMET_INSTALL_PATH = /Library/Frameworks
 ifeq ($(ROOTLESS),1)
-	Comet_XCODEFLAGS = SWIFT_ACTIVE_COMPILATION_CONDITIONS="ROOTLESS"
+ifneq ($(ROOTHIDE),0)
+$(error ROOTLESS and ROOTHIDE cannot both be enabled)
+endif
+endif
+
+ifeq ($(ROOTHIDE),1)
+	THEOS_PACKAGE_SCHEME = roothide
+	Comet_XCODEFLAGS = SWIFT_ACTIVE_COMPILATION_CONDITIONS="ROOTHIDE" GCC_PREPROCESSOR_DEFINITIONS="ROOTHIDE=1"
+	Comet_XCODEFLAGS += OTHER_LDFLAGS="$(inherited) -L$(THEOS)/vendor/lib -lroothide"
+	Comet_XCODEFLAGS += LD_RUNPATH_SEARCH_PATHS="$(inherited) @loader_path/Frameworks @loader_path/.jbroot/Library/Frameworks"
+	COMET_DYLIB_INSTALL_NAME = @loader_path/.jbroot/Library/Frameworks/Comet.framework/Comet
+	MOVE_TO_THEOS_PATH = $(THEOS)/lib/iphone/roothide/
+	PKG_NAME_SUFFIX = (RootHide)
+else ifeq ($(ROOTLESS),1)
 	THEOS_PACKAGE_SCHEME = rootless
-	COMET_INSTALL_PATH = /var/jb/Library/Frameworks
+	Comet_XCODEFLAGS = SWIFT_ACTIVE_COMPILATION_CONDITIONS="ROOTLESS" GCC_PREPROCESSOR_DEFINITIONS="ROOTLESS=1"
+	COMET_DYLIB_INSTALL_NAME = @rpath/Comet.framework/Comet
 	MOVE_TO_THEOS_PATH = $(THEOS)/lib/iphone/rootless/
-	# Control
 	PKG_NAME_SUFFIX = (Rootless)
 else
 	Comet_XCODEFLAGS = SWIFT_ACTIVE_COMPILATION_CONDITIONS=""
-	COMET_INSTALL_PATH = /Library/Frameworks
+	COMET_DYLIB_INSTALL_NAME = /Library/Frameworks/Comet.framework/Comet
 	MOVE_TO_THEOS_PATH = $(THEOS)/lib/
 endif
 
 include $(THEOS)/makefiles/common.mk
 
 XCODEPROJ_NAME = Comet
-Comet_XCODEFLAGS += LD_DYLIB_INSTALL_NAME=$(COMET_INSTALL_PATH)/Comet.framework/Comet
-Comet_XCODEFLAGS += DYLIB_INSTALL_NAME_BASE=$(COMET_INSTALL_PATH)/Comet.framework/Comet
+Comet_XCODEFLAGS += LD_DYLIB_INSTALL_NAME=$(COMET_DYLIB_INSTALL_NAME)
+Comet_XCODEFLAGS += DYLIB_INSTALL_NAME_BASE=$(COMET_DYLIB_INSTALL_NAME)
 Comet_XCODEFLAGS += DWARF_DSYM_FOLDER_PATH=$(THEOS_OBJ_DIR)/dSYMs
 Comet_XCODEFLAGS += CONFIGURATION_BUILD_DIR=$(THEOS_OBJ_DIR)/
 Comet_XCODEFLAGS += BUILD_LIBRARY_FOR_DISTRIBUTION=YES
@@ -39,10 +56,11 @@ before-package::
 		-e 's/\$${PKG_NAME_SUFFIX}/$(PKG_NAME_SUFFIX)/g' \
 		$(THEOS_STAGING_DIR)/DEBIAN/control$(ECHO_END)
 	
-ifeq ($(ROOTLESS),1)
-	# Move to staging dir
+ifneq ($(filter 1,$(ROOTLESS) $(ROOTHIDE)),)
+	# Xcode outputs outside Theos staging. Keep this root-relative so the
+	# selected package scheme applies its own package prefix.
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)$(COMET_INSTALL_PATH)$(ECHO_END)
-	$(ECHO_NOTHING)mv $(THEOS_OBJ_DIR)/Comet.framework/ $(THEOS_STAGING_DIR)$(COMET_INSTALL_PATH)$(ECHO_END)
+	$(ECHO_NOTHING)if [ -d "$(THEOS_OBJ_DIR)/Comet.framework" ]; then mv "$(THEOS_OBJ_DIR)/Comet.framework" "$(THEOS_STAGING_DIR)$(COMET_INSTALL_PATH)"; fi$(ECHO_END)
 endif
 
 	# Copy to theos/lib
