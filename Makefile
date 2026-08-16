@@ -14,7 +14,7 @@ COMET_INSTALL_PATH = /Library/Frameworks
 ifeq ($(ROOTHIDE),1)
 	THEOS_PACKAGE_SCHEME = roothide
 	Comet_XCODEFLAGS = SWIFT_ACTIVE_COMPILATION_CONDITIONS="ROOTHIDE" GCC_PREPROCESSOR_DEFINITIONS="ROOTHIDE=1"
-	Comet_XCODEFLAGS += OTHER_LDFLAGS="$(inherited) -lroothide"
+	Comet_XCODEFLAGS += OTHER_LDFLAGS="$(inherited) -L$(THEOS)/vendor/lib -lroothide"
 	Comet_XCODEFLAGS += LD_RUNPATH_SEARCH_PATHS="$(inherited) @loader_path/Frameworks @loader_path/.jbroot/Library/Frameworks"
 	COMET_DYLIB_INSTALL_NAME = @loader_path/.jbroot/Library/Frameworks/Comet.framework/Comet
 	MOVE_TO_THEOS_PATH = $(THEOS)/lib/iphone/roothide/
