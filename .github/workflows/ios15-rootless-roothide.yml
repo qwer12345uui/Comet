@@ -26,6 +26,8 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path | tee -a logs/toolchain.txt
           swiftc --version | tee -a logs/toolchain.txt
           brew list ldid >/dev/null 2>&1 || brew install ldid
+          brew list dpkg >/dev/null 2>&1 || brew install dpkg
+          command -v dpkg-deb | tee -a logs/toolchain.txt
           ldid -V | tee -a logs/toolchain.txt || true
 
       - name: Build standard rootless candidate with Theos
