@@ -84,10 +84,10 @@ jobs:
                 fi
               done < <(find "$payload_dir" -type f -print0)
               if [[ "$scheme" == roothide ]]; then
-                grep -RIna '/var/jb' "$payload_dir" "$audit_dir/DEBIAN" "$audit_dir/macho-audit.txt" && {
+                if grep -RIna '/var/jb' "$payload_dir" "$audit_dir/DEBIAN" "$audit_dir/macho-audit.txt"; then
                   echo "RootHide candidate contains forbidden fixed /var/jb reference: $deb" >&2
                   exit 1
-                } || true
+                fi
                 grep -q '@loader_path/.jbroot/Library/Frameworks/Comet.framework/Comet' "$audit_dir/macho-audit.txt" || {
                   echo "RootHide Comet install name was not observed in Mach-O audit: $deb" >&2
                   exit 1
