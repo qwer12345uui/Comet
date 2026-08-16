@@ -6,12 +6,13 @@
 //
 
 import Foundation
+import libroot
 
 internal extension Bundle {
     static var comet: Bundle {
-        // The bridge resolves this jailbreak-relative path through jbroot() for
-        // RootHide and through the standard rootless prefix for other schemes.
-        let path = CometJailbreakPath("/Library/Frameworks/Comet.framework/Resources.bundle/")
+        // libroot resolves the jailbreak prefix at runtime, including RootHide's
+        // randomized jbroot. This avoids a fixed bootstrap prefix in Swift.
+        let path = jbRootPath("/Library/Frameworks/Comet.framework/Resources.bundle/")
 
         if let bundle = Bundle(path: path) {
             NSLog("[Comet]: Bundle (\(path)): loaded")
