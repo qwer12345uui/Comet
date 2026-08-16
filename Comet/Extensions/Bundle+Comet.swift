@@ -6,13 +6,24 @@
 //
 
 import Foundation
-import libroot
+
+#if ROOTHIDE
+@_silgen_name("jbroot")
+private func cometJBRoot(_ path: NSString) -> NSString
+#endif
 
 internal extension Bundle {
     static var comet: Bundle {
-        // libroot resolves the jailbreak prefix at runtime, including RootHide's
-        // randomized jbroot. This avoids a fixed bootstrap prefix in Swift.
-        let path = jbRootPath("/Library/Frameworks/Comet.framework/Resources.bundle/")
+        let relativePath = "/Library/Frameworks/Comet.framework/Resources.bundle/"
+        #if ROOTHIDE
+        // RootHide randomizes its bootstrap location; resolve it through its
+        // runtime jbroot API rather than embedding a bootstrap prefix.
+        let path = cometJBRoot(relativePath as NSString) as String
+        #elseif ROOTLESS
+        let path = "/var/jb" + relativePath
+        #else
+        let path = relativePath
+        #endif
 
         if let bundle = Bundle(path: path) {
             NSLog("[Comet]: Bundle (\(path)): loaded")
