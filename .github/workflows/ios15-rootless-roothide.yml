@@ -1,0 +1,107 @@
+name: Build Comet iOS 15 rootless and RootHide
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - migration/ios15-rootless-roothide-20260816
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+
+      - name: Record toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p logs artifacts/rootless artifacts/roothide audit extracted
+          xcodebuild -version | tee logs/toolchain.txt
+          xcrun --sdk iphoneos --show-sdk-path | tee -a logs/toolchain.txt
+          swiftc --version | tee -a logs/toolchain.txt
+          brew list ldid >/dev/null 2>&1 || brew install ldid
+          ldid -V | tee -a logs/toolchain.txt || true
+
+      - name: Build standard rootless candidate with Theos
+        shell: bash
+        run: |
+          set -o pipefail
+          git clone --recurse-submodules --depth 1 https://github.com/theos/theos.git "$GITHUB_WORKSPACE/theos-rootless"
+          export THEOS="$GITHUB_WORKSPACE/theos-rootless"
+          make clean package ROOTLESS=1 ROOTHIDE=0 THEOS_PACKAGE_SCHEME=rootless TARGET=iphone:clang:latest:15.0 FINALPACKAGE=1 2>&1 | tee logs/build-rootless.log
+          cp packages/*.deb artifacts/rootless/
+
+      - name: Build RootHide candidate with roothide/theos
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf .theos packages
+          git clone --recurse-submodules --depth 1 https://github.com/roothide/theos.git "$GITHUB_WORKSPACE/theos-roothide"
+          export THEOS="$GITHUB_WORKSPACE/theos-roothide"
+          test -f "$THEOS/vendor/include/roothide/roothide.h" || test -f "$THEOS/vendor/include/roothide.h"
+          make clean package ROOTLESS=0 ROOTHIDE=1 THEOS_PACKAGE_SCHEME=roothide TARGET=iphone:clang:latest:15.0 FINALPACKAGE=1 2>&1 | tee logs/build-roothide.log
+          cp packages/*.deb artifacts/roothide/
+
+      - name: Audit candidate packages
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          shopt -s nullglob
+          for scheme in rootless roothide; do
+            for deb in artifacts/$scheme/*.deb; do
+              stem="$(basename "$deb" .deb)"
+              audit_dir="audit/$scheme/$stem"
+              payload_dir="extracted/$scheme/$stem"
+              mkdir -p "$audit_dir" "$payload_dir"
+              shasum -a 256 "$deb" > "$audit_dir/SHA256SUM"
+              dpkg-deb -I "$deb" > "$audit_dir/dpkg-deb-I.txt"
+              dpkg-deb -c "$deb" > "$audit_dir/dpkg-deb-c.txt"
+              dpkg-deb -x "$deb" "$payload_dir"
+              dpkg-deb -e "$deb" "$audit_dir/DEBIAN"
+              find "$payload_dir" -type f \( -name preinst -o -name postinst -o -name prerm -o -name postrm -o -name '*.sh' \) -print > "$audit_dir/script-list.txt"
+              grep -RInaE '/var/jb|/rootfs|jbroot\(|@loader_path|@rpath|LaunchDaemon|launchd' "$payload_dir" "$audit_dir/DEBIAN" > "$audit_dir/path-audit.txt" || true
+              : > "$audit_dir/macho-audit.txt"
+              while IFS= read -r -d '' file; do
+                if file -b "$file" | grep -q 'Mach-O'; then
+                  {
+                    echo "### $file"
+                    file "$file"
+                    xcrun otool -D "$file" || true
+                    xcrun otool -L "$file" || true
+                    xcrun otool -l "$file" | grep -A2 LC_RPATH || true
+                    codesign -d --entitlements :- "$file" 2>&1 || true
+                    strings -a "$file" | grep -E '/var/jb|/rootfs|jbroot|@loader_path|@rpath' || true
+                  } >> "$audit_dir/macho-audit.txt"
+                fi
+              done < <(find "$payload_dir" -type f -print0)
+              if [[ "$scheme" == roothide ]]; then
+                grep -RIna '/var/jb' "$payload_dir" "$audit_dir/DEBIAN" "$audit_dir/macho-audit.txt" && {
+                  echo "RootHide candidate contains forbidden fixed /var/jb reference: $deb" >&2
+                  exit 1
+                } || true
+                grep -q '@loader_path/.jbroot/Library/Frameworks/Comet.framework/Comet' "$audit_dir/macho-audit.txt" || {
+                  echo "RootHide Comet install name was not observed in Mach-O audit: $deb" >&2
+                  exit 1
+                }
+              fi
+            done
+          done
+
+      - name: Upload candidates and full evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comet-ios15-rootless-roothide-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            artifacts/**
+            logs/**
+            audit/**
+            extracted/**
